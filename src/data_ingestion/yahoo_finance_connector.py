@@ -99,68 +99,68 @@ if __name__ == '__main__':
     connector = YahooFinanceConnector()
 
     # Пример 1: Загрузка дневных данных для AAPL
-    symbol_to_test = "AAPL"
-    start = datetime(2023, 1, 1)
-    end = datetime(2023, 12, 31)
-    data_aapl = connector.fetch_data(symbol_to_test, start, end, interval="1d")
-    if not data_aapl.empty:
-        print(f"\nData for {symbol_to_test} ({start.date()} to {end.date()}):")
-        print(data_aapl.head())
-        print(data_aapl.tail())
-    else:
-        print(f"\nNo data retrieved for {symbol_to_test}.")
+    #symbol_to_test = "AAPL"
+    #start = datetime(2023, 1, 1)
+    #end = datetime(2023, 12, 31)
+    #data_aapl = connector.fetch_data(symbol_to_test, start, end, interval="1d")
+    #if not data_aapl.empty:
+    #    print(f"\nData for {symbol_to_test} ({start.date()} to {end.date()}):")
+    #    print(data_aapl.head())
+    #    print(data_aapl.tail())
+    #else:
+    #    print(f"\nNo data retrieved for {symbol_to_test}.")
 
     # Пример 2: Загрузка часовых данных для EUR/USD (для интервалов < 1 дня, yfinance имеет ограничения по периоду)
-    symbol_to_test = "EURUSD=X"
-    start = datetime(2023, 12, 1)
-    end = datetime(2023, 12, 31)
-    data_eurusd_1h = connector.fetch_data(symbol_to_test, start, end, interval="1h") # Ограничение по датам для часовиков!
-    if not data_eurusd_1h.empty:
-        print(f"\nHourly data for {symbol_to_test} ({start.date()} to {end.date()}):")
-        print(data_eurusd_1h.head())
-    else:
-        print(f"\nNo hourly data retrieved for {symbol_to_test}.")
+    #symbol_to_test = "EURUSD=X"
+    #start = datetime(2023, 12, 1)
+    #end = datetime(2023, 12, 31)
+    #data_eurusd_1h = connector.fetch_data(symbol_to_test, start, end, interval="1h") # Ограничение по датам для часовиков!
+    #if not data_eurusd_1h.empty:
+    #    print(f"\nHourly data for {symbol_to_test} ({start.date()} to {end.date()}):")
+    #    print(data_eurusd_1h.head())
+    #else:
+    #    print(f"\nNo hourly data retrieved for {symbol_to_test}.")
 
-  # Пример 3: Загрузка данных для GER40 (DAX) - тикер ^GDAXI
-  symbol_ger40 = "^GDAXI"
-  start_ger40 = datetime(2023, 1, 1)
-  end_ger40 = datetime(2023, 12, 31)
-  data_ger40 = connector.fetch_data(symbol_ger40, start_ger40, end_ger40, interval="1d")
-  if not data_ger40.empty:
-      print(f"\nData for {symbol_ger40} ({start_ger40.date()} to {end_ger40.date()}):")
-      print(data_ger40.head())
-  else:
-      print(f"\nNo data retrieved for {symbol_ger40}.")
+    # Пример 3: Загрузка данных для GER40 (DAX) - тикер ^GDAXI
+    #symbol_ger40 = "^GDAXI"
+    #start_ger40 = datetime(2023, 1, 1)
+    #end_ger40 = datetime(2023, 12, 31)
+    #data_ger40 = connector.fetch_data(symbol_ger40, start_ger40, end_ger40, interval="1d")
+    #if not data_ger40.empty:
+    #    print(f"\nData for {symbol_ger40} ({start_ger40.date()} to {end_ger40.date()}):")
+    #    print(data_ger40.head())
+    #else:
+    #    print(f"\nNo data retrieved for {symbol_ger40}.")
+    
+    # Пример 4: Получение информации об инструменте
+    #info_aapl = connector.get_info("AAPL")
+    #if info_aapl:
+    #    print(f"\nInfo for AAPL:")
+    #    # print(info_aapl) # Распечатает всю информацию
+    #    print(f"  Name: {info_aapl.get('shortName', 'N/A')}")
+    #    print(f"  Sector: {info_aapl.get('sector', 'N/A')}")
+    #    print(f"  Industry: {info_aapl.get('industry', 'N/A')}")
+    #else:
+    #    print("\nNo info retrieved for AAPL.")
 
-  # Пример 4: Получение информации об инструменте
-  info_aapl = connector.get_info("AAPL")
-  if info_aapl:
-      print(f"\nInfo for AAPL:")
-      # print(info_aapl) # Распечатает всю информацию
-      print(f"  Name: {info_aapl.get('shortName', 'N/A')}")
-      print(f"  Sector: {info_aapl.get('sector', 'N/A')}")
-      print(f"  Industry: {info_aapl.get('industry', 'N/A')}")
-  else:
-      print("\nNo info retrieved for AAPL.")
+    #info_invalid = connector.get_info("INVALIDTICKERXYZ123")
+    #if not info_invalid:
+    #    print("\nCorrectly handled invalid ticker for get_info.")
+    
+    # Пример 5: Попытка получить список доступных символов (вызовет NotImplementedError)
+    #try:
+    #    connector.get_available_symbols()
+    #except NotImplementedError as e:
+    #    print(f"\nSuccessfully caught: {e}")
 
-  info_invalid = connector.get_info("INVALIDTICKERXYZ123")
-  if not info_invalid:
-      print("\nCorrectly handled invalid ticker for get_info.")
-
-  # Пример 5: Попытка получить список доступных символов (вызовет NotImplementedError)
-  try:
-      connector.get_available_symbols()
-  except NotImplementedError as e:
-      print(f"\nSuccessfully caught: {e}")
-
-  # Пример с GER40, который ты упоминал, для азиатской сессии
-  # Обрати внимание, что yfinance вернет дневные свечи. 
-  # Анализ конкретных сессий (азиатская, европейская, американская) на основе дневных свечей потребует дополнительной логики
-  # или данных с более мелким таймфреймом и точными временными метками сессий.
-  # Для примера, как в твоем запросе про GER40, тикер на Yahoo Finance обычно ^GDAXI
-  symbol_ger40_example = "^GDAXI" # Тикер для DAX (GER40)
-  start_example = datetime(2023, 1, 1)
-  end_example = datetime(2023, 12, 31)
+    # Пример с GER40, который ты упоминал, для азиатской сессии
+    # Обрати внимание, что yfinance вернет дневные свечи. 
+    # Анализ конкретных сессий (азиатская, европейская, американская) на основе дневных свечей потребует дополнительной логики
+    # или данных с более мелким таймфреймом и точными временными метками сессий.
+    # Для примера, как в твоем запросе про GER40, тикер на Yahoo Finance обычно ^GDAXI
+    symbol_ger40_example = "^GDAXI" # Тикер для DAX (GER40)
+    start_example = datetime(2023, 1, 1)
+    end_example = datetime(2023, 12, 31)
     
     print(f"\nFetching data for {symbol_ger40_example} to demonstrate part of your initial query...")
     data_ger40_example = connector.fetch_data(symbol_ger40_example, start_example, end_example, interval="1d")
