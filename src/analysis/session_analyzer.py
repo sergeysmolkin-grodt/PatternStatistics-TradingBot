@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime, time, date
 import pytz # Добавим pytz для работы с часовыми поясами
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from src.core.trading_sessions import SessionDefinition, get_utc_session_boundaries_for_date
 from src.core.data_manager import DataManager # Может понадобиться для получения данных
@@ -97,40 +97,74 @@ class SessionAnalyzer:
         
         return result_df.sort_index()
 
-    def analyze_session_trend(
+    def analyze_session_details(
         self, 
         session_data: pd.DataFrame,
-        session_definition: SessionDefinition # Добавим для логирования
-    ) -> Optional[str]:
+        session_definition: SessionDefinition 
+    ) -> Optional[Dict[str, Any]]:
         """
-        Анализирует тренд сессии (например, "bullish", "bearish", "flat").
-        Это очень упрощенный пример.
+        Анализирует детали сессии: тренд, количество бычьих/медвежьих свечей, общий объем.
 
         Args:
             session_data: DataFrame с данными OHLCV только для одной сессии одного дня.
-                          Ожидается, что данные уже отфильтрованы для конкретной сессии.
             session_definition: Определение анализируемой сессии (для логирования).
 
         Returns:
-            Строка, описывающая тренд ("bullish", "bearish", "flat"), или None, если данных недостаточно.
+            Словарь с деталями сессии или None, если данных недостаточно.
+            Пример словаря: {
+                'trend': 'bullish', 
+                'bullish_candles': 5, 
+                'bearish_candles': 3, 
+                'neutral_candles': 1, 
+                'total_volume': 1000000,
+                'session_open': 150.00,
+                'session_close': 151.00,
+                'session_high': 151.50,
+                'session_low': 149.50
+            }
         """
         if session_data.empty or len(session_data) < 1:
-            logger.warning(f"Not enough data to analyze trend for session {session_definition.name}. Data has {len(session_data)} rows.")
+            logger.warning(f"Not enough data to analyze details for session {session_definition.name}. Data has {len(session_data)} rows.")
             return None
-        
+
+        # Тренд по Open/Close сессии
         open_price = session_data['Open'].iloc[0]
         close_price = session_data['Close'].iloc[-1]
-
-        logger.debug(f"Analyzing trend for session {session_definition.name}: Open={open_price}, Close={close_price}")
-
+        high_price = session_data['High'].max()
+        low_price = session_data['Low'].min()
+        
+        trend = "flat"
         if close_price > open_price:
-            return "bullish"
+            trend = "bullish"
         elif close_price < open_price:
-            return "bearish"
-        else:
-            return "flat"
+            trend = "bearish"
 
-    def get_daily_session_trends(
+        # Подсчет типов свечей
+        bullish_candles = len(session_data[session_data['Close'] > session_data['Open']])
+        bearish_candles = len(session_data[session_data['Close'] < session_data['Open']])
+        neutral_candles = len(session_data[session_data['Close'] == session_data['Open']])
+
+        # Общий объем
+        total_volume = session_data['Volume'].sum()
+
+        logger.debug(
+            f"Session {session_definition.name} details: Trend={trend}, O={open_price}, C={close_price}, H={high_price}, L={low_price}, "
+            f"Bullish={bullish_candles}, Bearish={bearish_candles}, Neutral={neutral_candles}, Volume={total_volume}"
+        )
+
+        return {
+            'trend': trend,
+            'session_open': open_price,
+            'session_close': close_price,
+            'session_high': high_price,
+            'session_low': low_price,
+            'bullish_candles': bullish_candles,
+            'bearish_candles': bearish_candles,
+            'neutral_candles': neutral_candles,
+            'total_volume': total_volume
+        }
+
+    def get_daily_session_analysis(
         self,
         symbol: str,
         session_definition: SessionDefinition,
@@ -139,46 +173,50 @@ class SessionAnalyzer:
         data_interval: str = "1h"
     ) -> pd.DataFrame:
         """
-        Получает данные для сессии и анализирует тренд для каждого дня.
+        Получает данные для сессии и анализирует ее характеристики для каждого дня.
 
         Returns:
-            DataFrame с колонками ['Date', 'SessionName', 'Trend', 'SessionOpen', 'SessionClose', 'SessionHigh', 'SessionLow'].
+            DataFrame с колонками, включающими 'Date', 'SessionName', 'Trend', 
+            'SessionOpen', 'SessionClose', 'SessionHigh', 'SessionLow',
+            'BullishCandles', 'BearishCandles', 'NeutralCandles', 'TotalVolume'.
         """
         all_session_data = self.get_session_data(symbol, session_definition, start_date_dt, end_date_dt, data_interval)
         
         if all_session_data.empty:
-            logger.warning(f"No session data to analyze daily trends for {symbol}, session {session_definition.name}.")
-            return pd.DataFrame(columns=['Date', 'SessionName', 'Trend', 'SessionOpen', 'SessionClose', 'SessionHigh', 'SessionLow'])
+            logger.warning(f"No session data to analyze daily characteristics for {symbol}, session {session_definition.name}.")
+            return pd.DataFrame()
 
-        results = []        
-        # Группируем данные по дням. Индекс должен быть DatetimeIndex в UTC.
-        # all_session_data УЖЕ содержит только данные внутри сессий.
-        # Группируем по дате (часть индекса datetime)
+        results = []
+        output_columns = [
+            'Date', 'SessionName', 'Trend', 'SessionOpen', 'SessionClose', 'SessionHigh', 'SessionLow',
+            'BullishCandles', 'BearishCandles', 'NeutralCandles', 'TotalVolume'
+        ]
+        
         for day_date, daily_data_for_session in all_session_data.groupby(all_session_data.index.date):
             if daily_data_for_session.empty:
-                continue # Такого быть не должно, если all_session_data не пуст и группировка корректна
+                continue
             
-            trend = self.analyze_session_trend(daily_data_for_session, session_definition)
-            if trend:
-                session_open = daily_data_for_session['Open'].iloc[0]
-                session_close = daily_data_for_session['Close'].iloc[-1]
-                session_high = daily_data_for_session['High'].max()
-                session_low = daily_data_for_session['Low'].min()
+            analysis_results = self.analyze_session_details(daily_data_for_session, session_definition)
+            if analysis_results:
                 results.append({
                     'Date': pd.to_datetime(day_date), 
                     'SessionName': session_definition.name,
-                    'Trend': trend,
-                    'SessionOpen': session_open,
-                    'SessionClose': session_close,
-                    'SessionHigh': session_high,
-                    'SessionLow': session_low,
+                    'Trend': analysis_results['trend'],
+                    'SessionOpen': analysis_results['session_open'],
+                    'SessionClose': analysis_results['session_close'],
+                    'SessionHigh': analysis_results['session_high'],
+                    'SessionLow': analysis_results['session_low'],
+                    'BullishCandles': analysis_results['bullish_candles'],
+                    'BearishCandles': analysis_results['bearish_candles'],
+                    'NeutralCandles': analysis_results['neutral_candles'],
+                    'TotalVolume': analysis_results['total_volume']
                 })
         
         if not results:
-            logger.info(f"No daily session trends could be analyzed for {symbol}, session {session_definition.name}.")
-            return pd.DataFrame(columns=['Date', 'SessionName', 'Trend', 'SessionOpen', 'SessionClose', 'SessionHigh', 'SessionLow'])
+            logger.info(f"No daily session analysis could be performed for {symbol}, session {session_definition.name}.")
+            return pd.DataFrame(columns=output_columns)
 
-        return pd.DataFrame(results)
+        return pd.DataFrame(results, columns=output_columns)
 
 # Пример использования (для тестирования):
 if __name__ == '__main__':
@@ -200,55 +238,80 @@ if __name__ == '__main__':
 
     # --- Пример для GER40 (DAX: ^GDAXI) с использованием Xetra сессии --- 
     symbol_target = "^GDAXI"
-    # Используем точное определение сессии Xetra
-    # session_def_target = SUPPORTED_SESSIONS.get("frankfurt_xetra") # Было так
     session_def_target = SUPPORTED_SESSIONS.get("frankfurt_xetra")
     if not session_def_target:
         logger.error(f"Session definition for Xetra not found.")
         exit()
 
-    # Даты, включающие переход на летнее/зимнее время для Европы в 2023
-    # DST начался 26 марта, закончился 29 октября.
-    start_test_period = datetime(2023, 3, 20) # До перехода на летнее время
-    end_test_period = datetime(2023, 3, 30)   # После перехода на летнее время
+    # Тест перехода на летнее время (март 2025)
+    # DST в Европе обычно: конец марта - конец октября.
+    # Для 2025 в Europe/Berlin: DST начнется 30 марта 2025.
+    start_dst_transition_test_period = datetime(2025, 3, 25) # Вторник, до перехода
+    end_dst_transition_test_period = datetime(2025, 4, 5)   # Суббота, после перехода
     
     logger.info(f"\n--- Analysing {symbol_target} for {session_def_target.name} session ({session_def_target.local_start_time}-{session_def_target.local_end_time} {session_def_target.exchange_timezone}) --- ")
-    logger.info(f"Period: {start_test_period.date()} to {end_test_period.date()}, Data Interval: 1h")
+    logger.info(f"Period (DST Start Test): {start_dst_transition_test_period.date()} to {end_dst_transition_test_period.date()}, Data Interval: 1h")
 
-    daily_trends_ger40_xetra = session_analyzer.get_daily_session_trends(
+    daily_analysis_results = session_analyzer.get_daily_session_analysis(
         symbol_target,
         session_def_target,
-        start_test_period,
-        end_test_period,
+        start_dst_transition_test_period,
+        end_dst_transition_test_period,
         data_interval="1h"
     )
 
-    if not daily_trends_ger40_xetra.empty:
-        print(f"\nDaily trends for {symbol_target} during {session_def_target.name} session (around DST start):")
-        print(daily_trends_ger40_xetra)
-        bullish_sessions = daily_trends_ger40_xetra[daily_trends_ger40_xetra['Trend'] == 'bullish']
-        print(f"Number of bullish '{session_def_target.name}' sessions: {len(bullish_sessions)} out of {len(daily_trends_ger40_xetra)} analyzed days.")
-    else:
-        print(f"\nNo daily trends could be analyzed for {symbol_target} during {session_def_target.name} session.")
+    if not daily_analysis_results.empty:
+        print(f"\nDaily session analysis for {symbol_target} during {session_def_target.name} session (around DST start):")
+        print(daily_analysis_results)
+        # Пример дополнительной статистики на основе новых колонок
+        avg_bullish_candles = daily_analysis_results['BullishCandles'].mean()
+        avg_bearish_candles = daily_analysis_results['BearishCandles'].mean()
+        avg_total_volume = daily_analysis_results['TotalVolume'].mean()
+        print(f"Avg Bullish Candles per session: {avg_bullish_candles:.2f}")
+        print(f"Avg Bearish Candles per session: {avg_bearish_candles:.2f}")
+        print(f"Avg Total Volume per session: {avg_total_volume:,.0f}")
+        
+        # Подсчет количества "лонговых" сессий на основе нового определения (например, больше бычьих свечей чем медвежьих)
+        # Это можно вынести в отдельную функцию или делать по месту
+        daily_analysis_results['IsLongByCandleCount'] = daily_analysis_results['BullishCandles'] > daily_analysis_results['BearishCandles']
+        num_long_by_candles = daily_analysis_results['IsLongByCandleCount'].sum()
+        print(f"Number of sessions considered 'long' by candle count: {num_long_by_candles} out of {len(daily_analysis_results)} analyzed days.")
 
-    # Еще один тест вокруг окончания DST
-    start_test_period_dst_end = datetime(2023, 10, 25) # До перехода на зимнее время
-    end_test_period_dst_end = datetime(2023, 11, 5)   # После перехода на зимнее время
+    else:
+        print(f"\nNo daily session analysis could be performed for {symbol_target} during {session_def_target.name} session.")
+
+    # Тест перехода на зимнее время (октябрь/ноябрь 2024)
+    # Для 2024 в Europe/Berlin: DST закончится 27 октября 2024.
+    start_winter_transition_test_period = datetime(2024, 10, 22) # Вторник, до перехода
+    end_winter_transition_test_period = datetime(2024, 11, 2)   # Суббота, после перехода
     logger.info(f"\n--- Analysing {symbol_target} for {session_def_target.name} (around DST end) --- ")
-    logger.info(f"Period: {start_test_period_dst_end.date()} to {end_test_period_dst_end.date()}, Data Interval: 1h")
+    logger.info(f"Period (DST End Test): {start_winter_transition_test_period.date()} to {end_winter_transition_test_period.date()}, Data Interval: 1h")
 
-    daily_trends_ger40_xetra_dst_end = session_analyzer.get_daily_session_trends(
+    daily_analysis_results = session_analyzer.get_daily_session_analysis(
         symbol_target,
         session_def_target,
-        start_test_period_dst_end,
-        end_test_period_dst_end,
+        start_winter_transition_test_period,
+        end_winter_transition_test_period,
         data_interval="1h"
     )
-    if not daily_trends_ger40_xetra_dst_end.empty:
-        print(f"\nDaily trends for {symbol_target} during {session_def_target.name} session (around DST end):")
-        print(daily_trends_ger40_xetra_dst_end)
+    if not daily_analysis_results.empty:
+        print(f"\nDaily session analysis for {symbol_target} during {session_def_target.name} session (around DST end):")
+        print(daily_analysis_results)
+        # Пример дополнительной статистики на основе новых колонок
+        avg_bullish_candles = daily_analysis_results['BullishCandles'].mean()
+        avg_bearish_candles = daily_analysis_results['BearishCandles'].mean()
+        avg_total_volume = daily_analysis_results['TotalVolume'].mean()
+        print(f"Avg Bullish Candles per session: {avg_bullish_candles:.2f}")
+        print(f"Avg Bearish Candles per session: {avg_bearish_candles:.2f}")
+        print(f"Avg Total Volume per session: {avg_total_volume:,.0f}")
+        
+        # Подсчет количества "лонговых" сессий на основе нового определения (например, больше бычьих свечей чем медвежьих)
+        # Это можно вынести в отдельную функцию или делать по месту
+        daily_analysis_results['IsLongByCandleCount'] = daily_analysis_results['BullishCandles'] > daily_analysis_results['BearishCandles']
+        num_long_by_candles = daily_analysis_results['IsLongByCandleCount'].sum()
+        print(f"Number of sessions considered 'long' by candle count: {num_long_by_candles} out of {len(daily_analysis_results)} analyzed days.")
     else:
-        print(f"\nNo daily trends could be analyzed for {symbol_target} during {session_def_target.name} session (around DST end).")
+        print(f"\nNo daily session analysis could be performed for {symbol_target} during {session_def_target.name} session.")
 
 
     # --- Проверка с "Asia Generic UTC" (должна работать как раньше, но через новый механизм) ---
