@@ -4,6 +4,7 @@ yfinance
 requests
 python-dotenv
 pyarrow
+pytz
 # FastAPI for API - to be added when API development starts
 # uvicorn for running FastAPI - to be added when API development starts
 # SQLAlchemy for database interaction (optional, consider if needed later) 
